@@ -401,11 +401,16 @@ Fine-tuned & 0.716    & 0.304        & 0.646         \\
 The fine-tuned model shows a significant improvement in pointing accuracy, increasing from 0.611 to 0.716, indicating better localization of important regions. Additionally, deletion AUC decreases from 0.357 to 0.304, suggesting that removing important regions more effectively degrades model performance. Insertion AUC increases from 0.617 to 0.646, demonstrating that the model relies more strongly on relevant regions for its predictions.
 
 \subsubsection{Heatmap Analysis}
-Add Image
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\columnwidth]{heatmap.png}
+\caption{Occlusion sensitivity heatmap used in Experiment 4.}
+\label{fig:exp4_heatmap}
+\end{figure}
 
 \subsubsection{Explanation of Results}
-The baseline model relies heavily on non-semantic cues such as textures and background patterns, leading to hallucinated detections. This is reflected in lower insertion AUC and higher deletion AUC, indicating poor alignment between important regions and predictions.
+The baseline model relies heavily on non-semantic cues such as textures and background patterns, leading to hallucinated detections. This is reflected in poor AUC, indicating bad alignment between important regions and predictions.
 
-In contrast, the fine-tuned model suppresses these spurious correlations. The increase in insertion AUC shows that adding important regions quickly restores confidence, while the decrease in deletion AUC indicates that removing these regions significantly impacts predictions. Additionally, pointing game accuracy improves from \textit{XXX} to \textit{XXX}, demonstrating better localization of relevant features.
+In contrast, the fine-tuned model suppresses these spurious correlations. The increase in insertion AUC shows that adding important regions quickly restores confidence, while the decrease in deletion AUC indicates that removing these regions significantly impacts predictions. Additionally, pointing game accuracy improves from \textit{0.611} to \textit{0.716}, demonstrating better localization of relevant features.
 
 Overall, these results confirm that incorporating OoD data as background enhances both robustness and interpretability of the model.
