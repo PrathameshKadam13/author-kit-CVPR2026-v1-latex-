@@ -283,9 +283,7 @@ Confidence scores are collected from all detections produced on OoD images befor
 
 \begin{figure}[t]
 \centering
-\IfFileExists{conf_hist.png}
-{\includegraphics[width=0.45\textwidth]{conf_hist.png}}
-{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Confidence Histogram}}}
+\includegraphics[width=0.45\textwidth]{Calibration.png}
 \caption{Distribution of detection confidence scores on OoD data before and after calibration.}
 \end{figure}
 
@@ -307,9 +305,7 @@ For each detected bounding box in OoD images, the frequency energy is computed o
 
 \begin{figure}[t]
 \centering
-\IfFileExists{freq_obj.png}
-{\includegraphics[width=0.45\textwidth]{freq_obj.png}}
-{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Frequency vs Objectness}}}
+\includegraphics[width=0.45\textwidth]{Frequencyvsobjectness.png}
 \caption{Relationship between frequency energy and objectness score for detected regions.}
 \end{figure}
 
