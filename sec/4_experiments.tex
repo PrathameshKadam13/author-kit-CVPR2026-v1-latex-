@@ -35,71 +35,46 @@ We quantify explanation quality using insertion and deletion curves. The inserti
 \paragraph{Pointing Game.}
 We further evaluate localization quality using the pointing game metric, which checks whether the most salient point in the Grad-CAM heatmap falls within the predicted object region.
 
-\paragraph{Frequency Bias Analysis.}
-Let $\mathcal{C}$ denote the set of in-distribution (ID) classes. We analyze class-frequency bias by comparing class-wise detection counts between training-time distribution and model predictions at inference.
+\paragraph{Frequency-Driven Detection Bias Analysis.}
+We analyze the relationship between input frequency characteristics and detector outputs to understand whether high-frequency regions systematically induce false or overconfident detections.
 
-For a given model, let $N_c$ denote the number of detections assigned to class $c \in \mathcal{C}$ above confidence threshold $\tau$. We define the normalized predicted class distribution as:
+Let $x$ denote a detection region. We compute its high-frequency energy using the Laplacian operator:
 \begin{equation}
-    \hat{p}(c)=\frac{N_c}{\sum_{k\in\mathcal{C}}N_k}, \qquad c\in\mathcal{C}.
+    e_f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\Delta x(p)|^2,
 \end{equation}
+where $\Delta x(p)$ denotes the discrete Laplacian response.
 
-This provides an empirical estimate of how frequently each class is predicted by the detector under evaluation.
-
-To study bias shift induced by fine-tuning, we compare the predicted class distributions of the baseline and fine-tuned models. Let $\hat{p}_{\mathrm{base}}(c)$ and $\hat{p}_{\mathrm{ft}}(c)$ denote these distributions respectively. The change in class preference is analyzed qualitatively by observing shifts in dominant predicted categories:
-\begin{equation}
-    \Delta p(c) = \hat{p}_{\mathrm{ft}}(c) - \hat{p}_{\mathrm{base}}(c).
-\end{equation}
-
-A reduction in dominance of a few classes and a more balanced distribution across $\mathcal{C}$ indicates reduced frequency bias after fine-tuning.
-
-\vspace{0.5em}
-Although OoD-aware fine-tuning improves robustness at the semantic level, it does not explicitly address low-level spectral sensitivity in detections. Let the detection score be $s = g(z)$ for feature representation $z$. Under distribution shift, high-frequency perturbations may influence feature activations and lead to inflated detection scores:
-\begin{equation}
-    \Delta s \approx \nabla_z g(z)^\top \delta_{\mathrm{hf}}.
-\end{equation}
-
-This motivate a post-hoc correction mechanism that reduces such spurious activations using frequency-aware suppression during inference.
-
-\paragraph{Frequency Estimation.}
-Given a detection patch $x \in \mathbb{R}^{H\times W}$, we estimate high-frequency content using the discrete Laplacian:
-\begin{equation}
-    \Delta x(p) = \sum_{q \in \mathcal{N}(p)} x(q) - 4x(p),
-\end{equation}
-and compute frequency energy:
-\begin{equation}
-    e_f(x) = \frac{1}{|\Omega|} \sum_{p\in\Omega} |\Delta x(p)|^2.
-\end{equation}
-
-We normalize using:
+To normalize across images, we use a dataset-level scaling factor:
 \begin{equation}
     \hat{f}(x) = \min\!\left(\frac{e_f(x)}{Q_{75}(e_f)}, 2\right),
 \end{equation}
-ensuring robustness across samples.
+where $Q_{75}$ denotes the 75th percentile of frequency energy.
 
-\paragraph{Calibration Function.}
-For each detection with confidence $s$, we compute:
+\paragraph{Frequency--Objectness Relationship.}
+We study whether high-frequency regions induce inflated detection confidence. Empirically, we observe a positive association between frequency energy and detector responses, where texture-rich regions tend to produce higher objectness scores. This suggests that detectors exhibit sensitivity to high-frequency patterns even in the absence of semantic objects.
+
+\paragraph{Frequency--Detection Behavior Analysis.}
+We further analyze how frequency energy influences detection density and confidence. Specifically, we observe that regions with higher frequency energy tend to produce more detections and higher confidence values in baseline models. This indicates that high-frequency textures act as a spurious cue for objectness estimation.
+
+\paragraph{Calibration Effect.}
+To mitigate this behavior, we introduce a post-hoc calibration function:
 \begin{equation}
-    s' = s \cdot \exp(-\alpha \hat{f}) \cdot \frac{1}{\gamma(a)},
+    s' = s \cdot \exp(-\alpha \hat{f}) \cdot \exp(-\beta o) \cdot \frac{1}{\gamma(a)},
 \end{equation}
-where $a$ is bounding box area and:
-\begin{equation}
-    \gamma(a) =
-    \begin{cases}
-        \lambda, & a < \tau \\
-        1, & \text{otherwise}.
-    \end{cases}
-\end{equation}
+where $o$ is a proxy objectness score and $a$ is bounding box area.
 
-To prevent artificial score inflation:
-\begin{equation}
-    s' = \min(s', s).
-\end{equation}
+This calibration reduces confidence in high-frequency and small-region detections, suppressing hallucinated predictions without retraining.
 
-\paragraph{Implementation Details.}
-The calibration is applied post-hoc on detector outputs, requires no retraining, and involves only lightweight operations (Laplacian + scalar transforms), making it compatible with real-time detectors.
+\paragraph{Empirical Findings.}
+Our implementation shows:
+\begin{itemize}
+    \item A reduction in false positives from 444 to 324 (27.03\% decrease),
+    \item A decrease in hallucination rate from 0.209 to 0.164,
+    \item A left-shift in confidence distributions after calibration,
+    \item Reduced detection density in high-frequency regions.
+\end{itemize}
 
-\paragraph{Key Insight.}
-This formulation introduces an explicit frequency-based regularization at inference time, complementing training-time OoD exposure.
+These results confirm that frequency-aware post-hoc calibration effectively mitigates texture-induced false detections in real-time object detectors.
 
 \subsection{Experiment 1}
 
