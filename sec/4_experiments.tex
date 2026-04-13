@@ -380,6 +380,26 @@ All metrics are averaged over 50 test images. Heatmaps are also visually compare
 \subsubsection{Results}
 Quantitatively, the fine-tuned model outperforms the baseline across all metrics. It achieves higher insertion AUC, lower deletion AUC, and improved pointing game accuracy, indicating more reliable and faithful explanations. Qualitatively, heatmaps from the baseline model highlight irrelevant texture regions, whereas the fine-tuned model focuses on semantically meaningful object areas.
 
+\paragraph{Results}
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\hline
+Model      & Pointing & Deletion AUC & Insertion AUC \\
+\hline
+Baseline   & 0.611    & 0.357        & 0.617         \\
+Fine-tuned & 0.716    & 0.304        & 0.646         \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+The fine-tuned model shows a significant improvement in pointing accuracy, increasing from 0.611 to 0.716, indicating better localization of important regions. Additionally, deletion AUC decreases from 0.357 to 0.304, suggesting that removing important regions more effectively degrades model performance. Insertion AUC increases from 0.617 to 0.646, demonstrating that the model relies more strongly on relevant regions for its predictions.
+
 \subsubsection{Heatmap Analysis}
 Add Image
 
