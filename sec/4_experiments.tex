@@ -113,30 +113,53 @@ We measure overlap between Grad-CAM saliency regions $S$ and predicted bounding 
 \text{Reduction}(\%) = \frac{\text{FP}_{\text{base}} - \text{FP}_{\text{method}}}{\text{FP}_{\text{base}}} \times 100
 \]
 
-\subsubsection{Frequency Bias Analysis (Proposed XAI Method)}
+\section{Methodology}
 
-Let $C$ denote the set of classes. The predicted class distribution is:
-\[
-\hat{p}(c) = \frac{N_c}{\sum_{k \in C} N_k}
-\]
+\paragraph{Problem Setup.}
+Given an object detector that outputs a set of detections $\{(b_i, s_i)\}$, where $b_i$ denotes a bounding box and $s_i \in [0,1]$ is the associated confidence score, our goal is to reduce hallucinated detections under out-of-distribution (OoD) inputs without modifying the detector or retraining.
 
-Bias shift is:
-\[
-\Delta p(c) = \hat{p}_{\text{ft}}(c) - \hat{p}_{\text{base}}(c)
-\]
+\paragraph{Frequency Estimation.}
+For each detected region $x$ corresponding to a bounding box $b$, we compute a high-frequency energy measure using the Laplacian operator:
+\begin{equation}
+    e_f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\Delta x(p)|,
+\end{equation}
+where $\Omega$ denotes the set of pixels in the region and $\Delta$ is the discrete Laplacian operator. This captures local high-frequency content such as edges and textures.
 
-To analyze spectral influence, we compute Laplacian-based frequency energy:
-\[
-\Delta x(p) = \sum_{q \in N(p)} x(q) - 4x(p)
-\]
+To ensure robustness across samples, we normalize frequency using a dataset-level statistic:
+\begin{equation}
+    \hat{f}(x) = \min\!\left(\frac{e_f(x)}{Q_{75}(e_f)},\; 2\right),
+\end{equation}
+where $Q_{75}$ is the 75th percentile of frequency energy values computed over all detection regions.
 
-\[
-e_f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\Delta x(p)|^2
-\]
+\paragraph{Objectness Proxy.}
+Since explicit objectness scores are not directly available, we approximate objectness from confidence:
+\begin{equation}
+    o = \sqrt{s},
+\end{equation}
+which provides a monotonic transformation that stabilizes high-confidence responses.
 
-\[
-\hat{f}(x) = \min\left(\frac{e_f(x)}{Q_{75}(e_f)}, 2\right)
-\]
+\paragraph{Size Prior.}
+Small regions are more prone to spurious detections. We define a size-dependent penalty based on bounding box area $a$:
+\begin{equation}
+\gamma(a) =
+\begin{cases}
+1.5 & \text{if } a < a_{\text{tiny}}, \\
+1.0 & \text{otherwise}.
+\end{cases}
+\end{equation}
+
+\paragraph{Post-hoc Calibration.}
+We define a calibrated confidence score:
+\begin{equation}
+    s' = s \cdot \exp(-\alpha \hat{f}) \cdot \exp(-\beta o) \cdot \frac{1}{\gamma(a)},
+\end{equation}
+where $\alpha$ and $\beta$ control the strength of frequency and objectness suppression.
+
+To ensure conservative behavior, we enforce:
+\begin{equation}
+    s' = \min(s', s),
+\end{equation}
+preventing artificial boosting of confidence.
 
 \subsection{Evaluation Protocol}
 
@@ -253,7 +276,7 @@ Despite the introduction of OoD samples, the model maintains stable training dyn
 
 While detection count and confidence provide useful insights, they do not fully explain \textit{how} the model behavior changes. The observed improvements motivate a deeper investigation using explainability techniques, which we explore in the next experiment.
 
-\subsection{Experiment 2}
+\subsection{Experiment 2: OoD Hallucination Suppression}
 
 \paragraph{Experimental Setup.}
 We evaluate a YOLO-based detector on in-distribution (Pascal VOC 2012) and OoD data constructed from Caltech-256. The model is first evaluated in its raw form, followed by post-hoc calibration applied directly to detection outputs. 
@@ -303,7 +326,30 @@ Post-hoc calibration significantly reduces hallucinated detections. Frequency-ba
 
 \paragraph{Confidence Calibration Analysis.}
 
-Baseline predictions frequently include spurious detections in cluttered or high-texture regions. In contrast, the fine-tuned model produces cleaner predictions with improved localization and reduced false positives.
+\begin{figure}[t]
+\centering
+\IfFileExists{conf_hist.png}
+{\includegraphics[width=0.45\textwidth]{conf_hist.png}}
+{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Confidence Histogram}}}
+\caption{Confidence distribution before and after calibration on OoD data.}
+\end{figure}
+
+Calibration induces a clear leftward shift in confidence values, reducing the number of high-confidence predictions on OoD samples. This behavior suggests improved reliability, as overconfident detections are systematically suppressed.
+
+\paragraph{Frequency--Objectness Analysis.}
+
+\begin{figure}[t]
+\centering
+\IfFileExists{freq_obj.png}
+{\includegraphics[width=0.45\textwidth]{freq_obj.png}}
+{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Frequency vs Objectness}}}
+\caption{Frequency energy vs objectness score.}
+\end{figure}
+
+We observe that high-frequency regions tend to produce elevated objectness scores, indicating a bias toward texture-rich patterns. This explains the prevalence of hallucinated detections in OoD settings, where background textures differ from the training distribution.
+
+\paragraph{Qualitative Observations.}
+Visual inspection shows that raw predictions often include detections in cluttered or high-texture regions. After calibration, such detections are suppressed, leading to cleaner outputs while preserving meaningful predictions.
 
 \paragraph{Discussion.}
 These results demonstrate that:
