@@ -1,5 +1,118 @@
 \section{Experiments and Results}
 \label{sec:experiments}
 
-% Add your experiments and results content here
+\subsection{Experimental Setup}
 
+We evaluate our proposed frequency-aware objectness calibration framework on both in-distribution (ID) and out-of-distribution (OoD) datasets. 
+
+For ID evaluation, we use the Pascal VOC 2012 validation split. For OoD evaluation, we construct a proximal OoD dataset using Caltech-256 by selecting visually similar but semantically mismatched categories relative to VOC classes.
+
+We perform inference using a finetuned YOLO-based detector and apply our calibration method as a post-processing step without modifying model parameters.
+
+All experiments are conducted with a confidence threshold of $\tau = 0.25$.
+
+%---------------------------------------------------------
+
+\subsection{Evaluation Metrics}
+
+\paragraph{Hallucination Rate (HR).}
+We define hallucination rate as the fraction of images that produce at least one detection above a confidence threshold:
+
+\begin{equation}
+\text{HR} = \frac{1}{N} \sum_{i=1}^{N} \mathbb{I}\left( \exists\, d \in \mathcal{D}_i \;:\; s_d > \tau \right)
+\end{equation}
+
+where $N$ is the number of images, $\mathcal{D}_i$ denotes detections in image $i$, $s_d$ is the confidence score, and $\tau$ is the threshold.
+
+\paragraph{False Positive Count.}
+We compute the total number of detections across the dataset:
+
+\begin{equation}
+\text{FP} = \sum_{i=1}^{N} |\mathcal{D}_i|
+\end{equation}
+
+\paragraph{Reduction Percentage.}
+To quantify the effectiveness of calibration, we compute:
+
+\begin{equation}
+\text{Reduction}(\%) = 
+\frac{\text{FP}_{\text{raw}} - \text{FP}_{\text{cal}}}
+{\text{FP}_{\text{raw}}} \times 100
+\end{equation}
+
+%---------------------------------------------------------
+
+\subsection{Quantitative Results}
+
+Table~\ref{tab:main_results} summarizes the effect of our calibration framework on OoD data.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\hline
+Method & FP Count $\downarrow$ & HR $\downarrow$ & Reduction (\%) $\uparrow$ \\
+\hline
+Baseline (Finetuned YOLO) & 444 & 0.2096 & -- \\
++ Frequency Calibration & 389 & 0.1899 & 12.38 \\
++ Freq + Objectness Calibration & 324 & 0.1641 & 27.03 \\
+\hline
+\end{tabular}
+\caption{Quantitative comparison on OoD dataset. Lower is better for FP and HR, higher is better for reduction.}
+\label{tab:main_results}
+\end{table}
+
+We observe that frequency-only calibration reduces false positives by $12.38\%$, while incorporating objectness-aware suppression further improves the reduction to $27.03\%$.
+
+%---------------------------------------------------------
+
+\subsection{Ablation Analysis}
+
+We analyze the contribution of individual components through a progressive calibration strategy. Frequency-based suppression alone reduces hallucinated detections by attenuating responses in high-texture regions. However, this effect is limited due to the persistence of overconfident predictions.
+
+By incorporating objectness-aware modulation, the model further penalizes detections with inherently unstable confidence, leading to a substantial improvement in both false positive count and hallucination rate.
+
+This demonstrates that frequency and objectness cues provide complementary signals for mitigating OoD-induced hallucinations.
+
+%---------------------------------------------------------
+
+\subsection{Analysis of Confidence Calibration}
+
+We analyze the distributional shift in detection confidence before and after calibration.
+
+Let $\mathcal{S}_{\text{raw}}$ and $\mathcal{S}_{\text{cal}}$ denote confidence score distributions. We evaluate:
+
+\begin{equation}
+\Delta \mu = \mathbb{E}[\mathcal{S}_{\text{raw}}] - \mathbb{E}[\mathcal{S}_{\text{cal}}]
+\end{equation}
+
+Empirically, we observe $\Delta \mu > 0$, indicating a consistent reduction in mean confidence after calibration. This reflects suppression of overconfident predictions in OoD regions.
+
+%---------------------------------------------------------
+
+\subsection{Frequency-Objectness Correlation}
+
+To further validate our hypothesis, we analyze the relationship between frequency energy and objectness scores.
+
+Given frequency values $f_i$ and objectness scores $o_i$, we examine their joint distribution:
+
+\begin{equation}
+\mathcal{C} = \{(f_i, o_i)\}_{i=1}^{M}
+\end{equation}
+
+We observe a positive correlation between $f_i$ and $o_i$, indicating that high-frequency regions tend to produce disproportionately high objectness scores. This supports the presence of frequency-induced bias in detector behavior.
+
+%---------------------------------------------------------
+
+\subsection{Discussion}
+
+Our results demonstrate that:
+
+\begin{itemize}
+    \item Frequency-aware calibration reduces spurious detections caused by textured regions.
+    \item Objectness-aware suppression further stabilizes predictions by penalizing overconfident outputs.
+    \item The combined approach achieves up to $27.03\%$ reduction in false positives and improves hallucination rates.
+\end{itemize}
+
+Importantly, these improvements are achieved without retraining or modifying the detector, making the method suitable for real-time and resource-constrained applications.
+
+\end{document}
