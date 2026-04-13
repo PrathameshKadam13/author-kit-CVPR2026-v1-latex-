@@ -115,28 +115,48 @@ We measure overlap between Grad-CAM saliency regions $S$ and predicted bounding 
 
 \subsubsection{Frequency Bias Analysis (Proposed XAI Method)}
 
-Let $C$ denote the set of classes. The predicted class distribution is:
-\[
-\hat{p}(c) = \frac{N_c}{\sum_{k \in C} N_k}
-\]
+\paragraph{Frequency Estimation.}
+For each detected region $x$ corresponding to a bounding box $b$, we compute a high-frequency energy measure using the Laplacian operator:
+\begin{equation}
+    e_f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\Delta x(p)|,
+\end{equation}
+where $\Omega$ denotes the set of pixels in the region and $\Delta$ is the discrete Laplacian operator. This captures local high-frequency content such as edges and textures.
 
-Bias shift is:
-\[
-\Delta p(c) = \hat{p}_{\text{ft}}(c) - \hat{p}_{\text{base}}(c)
-\]
+To ensure robustness across samples, we normalize frequency using a dataset-level statistic:
+\begin{equation}
+    \hat{f}(x) = \min\!\left(\frac{e_f(x)}{Q_{75}(e_f)},\; 2\right),
+\end{equation}
+where $Q_{75}$ is the 75th percentile of frequency energy values computed over all detection regions.
 
-To analyze spectral influence, we compute Laplacian-based frequency energy:
-\[
-\Delta x(p) = \sum_{q \in N(p)} x(q) - 4x(p)
-\]
+\paragraph{Objectness Proxy.}
+Since explicit objectness scores are not directly available, we approximate objectness from confidence:
+\begin{equation}
+    o = \sqrt{s},
+\end{equation}
+which provides a monotonic transformation that stabilizes high-confidence responses.
 
-\[
-e_f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\Delta x(p)|^2
-\]
+\paragraph{Size Prior.}
+Small regions are more prone to spurious detections. We define a size-dependent penalty based on bounding box area $a$:
+\begin{equation}
+\gamma(a) =
+\begin{cases}
+1.5 & \text{if } a < a_{\text{tiny}}, \\
+1.0 & \text{otherwise}.
+\end{cases}
+\end{equation}
 
-\[
-\hat{f}(x) = \min\left(\frac{e_f(x)}{Q_{75}(e_f)}, 2\right)
-\]
+\paragraph{Post-hoc Calibration.}
+We define a calibrated confidence score:
+\begin{equation}
+    s' = s \cdot \exp(-\alpha \hat{f}) \cdot \exp(-\beta o) \cdot \frac{1}{\gamma(a)},
+\end{equation}
+where $\alpha$ and $\beta$ control the strength of frequency and objectness suppression.
+
+To ensure conservative behavior, we enforce:
+\begin{equation}
+    s' = \min(s', s),
+\end{equation}
+preventing artificial boosting of confidence.
 
 \subsection{Evaluation Protocol}
 
@@ -217,15 +237,14 @@ Fine-tuned & 2.16             & 0.735            \\
 \end{tabular}
 \end{table}
 
-\paragraph{Results Visualization}
-
-\textbf{[Placeholder: Figure Z – Bar Chart of Detection Counts and Confidence]}
-
-The visualization highlights a reduction in average detections along with an increase in confidence scores for the fine-tuned model.
-
 \paragraph{Qualitative Analysis}
 
-\textbf{[Placeholder: Figure W – Qualitative Comparison of Predictions]}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\columnwidth]{Predictions.png}
+\caption{Qualitative comparison of predictions between baseline and fine-tuned models.}
+\label{fig:qualitative_comparison}
+\end{figure}
 
 Visual inspection shows that the baseline model often produces scattered or spurious detections on OoD images, whereas the fine-tuned model produces fewer and more confident predictions.
 
@@ -254,65 +273,51 @@ Despite the introduction of OoD samples, the model maintains stable training dyn
 While detection count and confidence provide useful insights, they do not fully explain \textit{how} the model behavior changes. The observed improvements motivate a deeper investigation using explainability techniques, which we explore in the next experiment.
 
 \subsection{Experiment 2}
+\paragraph{Confidence Calibration Effect}
 
-\paragraph{Experimental Setup.}
-We evaluate a YOLO-based detector on in-distribution (Pascal VOC 2012) and OoD data constructed from Caltech-256. The model is first evaluated in its raw form, followed by post-hoc calibration applied directly to detection outputs. 
+\textbf{Description.}
+This analysis examines how post-hoc calibration alters the distribution of detection confidence scores under OoD conditions. The goal is to evaluate whether calibration reduces overconfident predictions that contribute to hallucinated detections.
 
-Inference is performed with a confidence threshold $\tau = 0.25$.
+\textbf{Experimental Setup.}
+Confidence scores are collected from all detections produced on OoD images before and after applying the proposed calibration. A confidence threshold of 0.25 is used, and histograms are constructed to compare the distribution of raw and calibrated scores.
 
-\paragraph{Evaluation Metrics.}
-We quantify hallucinated detections using:
-
-\begin{itemize}
-    \item \textbf{False Positives (FP):} total number of detections on OoD images,
-    \item \textbf{Hallucination Rate (HR):} fraction of images with at least one detection,
-\end{itemize}
-
-\begin{equation}
-    \mathrm{HR} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}[\#\text{detections}_i > 0],
-\end{equation}
-
-\begin{itemize}
-    \item \textbf{Reduction (\%):}
-\end{itemize}
-
-\begin{equation}
-    \mathrm{Reduction}(\%) = \frac{\mathrm{FP}_{\mathrm{raw}}-\mathrm{FP}_{\mathrm{cal}}}{\mathrm{FP}_{\mathrm{raw}}} \times 100.
-\end{equation}
-
-Additionally, we analyze the effect of calibration on confidence distributions, which serves as a proxy for prediction reliability under OoD shift.
-
-\paragraph{Quantitative Results.}
-
-\begin{table}[h]
+\begin{figure}[t]
 \centering
-\footnotesize
-\begin{tabular}{lccc}
-\hline
-Method & FP $\downarrow$ & HR $\downarrow$ & Reduction (\%) $\uparrow$ \\
-\hline
-Raw Detector & 444 & 0.2096 & -- \\
-+ Frequency Calibration & 389 & 0.1899 & 12.38 \\
-+ Frequency + Objectness & 324 & 0.1641 & 27.03 \\
-\hline
-\end{tabular}
-\caption{OoD hallucination suppression performance.}
-\end{table}
+\IfFileExists{conf_hist.png}
+{\includegraphics[width=0.45\textwidth]{conf_hist.png}}
+{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Confidence Histogram}}}
+\caption{Distribution of detection confidence scores on OoD data before and after calibration.}
+\end{figure}
 
-Post-hoc calibration significantly reduces hallucinated detections. Frequency-based suppression alone yields a $12.38\%$ reduction, while incorporating objectness-aware scaling further improves performance to $27.03\%$. The hallucination rate decreases consistently, indicating that fewer OoD images produce spurious detections.
+\textbf{Results.}
+The calibrated distribution exhibits a clear shift toward lower confidence values. In the raw detector, a large number of detections lie in the high-confidence range, whereas after calibration, the density of such predictions is significantly reduced.
 
-\paragraph{Confidence Calibration Analysis.}
+\textbf{Explanation.}
+This shift indicates that the detector is inherently overconfident when operating on OoD inputs. The proposed calibration mechanism effectively suppresses these overconfident predictions, leading to a more conservative and reliable confidence distribution. This behavior directly contributes to the observed reduction in false positives.
 
-Baseline predictions frequently include spurious detections in cluttered or high-texture regions. In contrast, the fine-tuned model produces cleaner predictions with improved localization and reduced false positives.
+\vspace{0.4cm}
 
-\paragraph{Discussion.}
-These results demonstrate that:
-(i) hallucinated detections are strongly correlated with high-frequency regions,
-(ii) the detector exhibits overconfidence under distribution shift,
-(iii) post-hoc calibration effectively improves robustness without retraining.
+\paragraph{Frequency--Objectness Bias}
 
-The proposed method remains lightweight and suitable for real-time deployment.
+\textbf{Description.}
+This analysis investigates the relationship between frequency characteristics of detected regions and their corresponding objectness scores. The goal is to understand whether high-frequency patterns systematically influence detector confidence.
 
+\textbf{Experimental Setup.}
+For each detected bounding box in OoD images, the frequency energy is computed over the corresponding image patch. Objectness is approximated from the detection confidence. A scatter plot is constructed to visualize the relationship between frequency energy and objectness.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{freq_obj.png}
+{\includegraphics[width=0.45\textwidth]{freq_obj.png}}
+{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Frequency vs Objectness}}}
+\caption{Relationship between frequency energy and objectness score for detected regions.}
+\end{figure}
+
+\textbf{Results.}
+The scatter plot reveals a noticeable trend where regions with higher frequency energy tend to produce higher objectness scores. This indicates that texture-rich regions are more likely to trigger strong detector responses.
+
+\textbf{Explanation.}
+This behavior suggests that the detector is biased toward high-frequency patterns, treating them as indicative of object presence even when no meaningful object exists. In OoD settings, such textures often arise from background clutter, leading to hallucinated detections. By penalizing high-frequency regions during calibration, this bias is reduced, resulting in improved robustness.
 \subsection{Explainability Analysis using Grad-CAM}
 
 \paragraph{Description}
@@ -345,7 +350,12 @@ The fine-tuned model shows consistent improvement in IoU and pointing accuracy, 
 
 \paragraph{Heatmap Analysis}
 
-\textbf{[Placeholder: Grad-CAM Heatmaps for Baseline vs Fine-tuned]}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\columnwidth]{gradcam.png}
+\caption{Grad-CAM heatmaps for baseline vs fine-tuned models.}
+\label{fig:gradcam_heatmaps}
+\end{figure}
 
 Grad-CAM visualizations indicate that the baseline model produces diffuse and scattered activations, often highlighting irrelevant background regions. In contrast, the fine-tuned model generates more concentrated and structured heatmaps that align more closely with object regions. This reflects improved attention localization and reduced activation on non-relevant areas.
 

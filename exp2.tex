@@ -1,0 +1,45 @@
+\paragraph{Confidence Calibration Effect}
+
+\textbf{Description.}
+This analysis examines how post-hoc calibration alters the distribution of detection confidence scores under OoD conditions. The goal is to evaluate whether calibration reduces overconfident predictions that contribute to hallucinated detections.
+
+\textbf{Experimental Setup.}
+Confidence scores are collected from all detections produced on OoD images before and after applying the proposed calibration. A confidence threshold of 0.25 is used, and histograms are constructed to compare the distribution of raw and calibrated scores.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{conf_hist.png}
+{\includegraphics[width=0.45\textwidth]{conf_hist.png}}
+{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Confidence Histogram}}}
+\caption{Distribution of detection confidence scores on OoD data before and after calibration.}
+\end{figure}
+
+\textbf{Results.}
+The calibrated distribution exhibits a clear shift toward lower confidence values. In the raw detector, a large number of detections lie in the high-confidence range, whereas after calibration, the density of such predictions is significantly reduced.
+
+\textbf{Explanation.}
+This shift indicates that the detector is inherently overconfident when operating on OoD inputs. The proposed calibration mechanism effectively suppresses these overconfident predictions, leading to a more conservative and reliable confidence distribution. This behavior directly contributes to the observed reduction in false positives.
+
+\vspace{0.4cm}
+
+\paragraph{Frequency--Objectness Bias}
+
+\textbf{Description.}
+This analysis investigates the relationship between frequency characteristics of detected regions and their corresponding objectness scores. The goal is to understand whether high-frequency patterns systematically influence detector confidence.
+
+\textbf{Experimental Setup.}
+For each detected bounding box in OoD images, the frequency energy is computed over the corresponding image patch. Objectness is approximated from the detection confidence. A scatter plot is constructed to visualize the relationship between frequency energy and objectness.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{freq_obj.png}
+{\includegraphics[width=0.45\textwidth]{freq_obj.png}}
+{\fbox{\parbox[c][4cm][c]{0.45\textwidth}{\centering Frequency vs Objectness}}}
+\caption{Relationship between frequency energy and objectness score for detected regions.}
+\end{figure}
+
+\textbf{Results.}
+The scatter plot reveals a noticeable trend where regions with higher frequency energy tend to produce higher objectness scores. This indicates that texture-rich regions are more likely to trigger strong detector responses.
+
+\textbf{Explanation.}
+This behavior suggests that the detector is biased toward high-frequency patterns, treating them as indicative of object presence even when no meaningful object exists. In OoD settings, such textures often arise from background clutter, leading to hallucinated detections. By penalizing high-frequency regions during calibration, this bias is reduced, resulting in improved robustness.
