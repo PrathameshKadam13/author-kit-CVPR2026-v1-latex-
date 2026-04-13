@@ -1,0 +1,30 @@
+\subsection{Occlusion Sensitivity Analysis for Explainability}
+
+\subsubsection{Description}
+We analyze the effect of out-of-distribution (OoD) data on object detection models using \textbf{occlusion sensitivity analysis}. This method helps identify which regions of an image contribute most to model predictions by systematically masking parts of the input. Our goal is to understand why the baseline model produces hallucinated detections and how fine-tuning with OoD data as background improves model behavior.
+
+\subsubsection{Experimental Setup}
+Occlusion is applied using a sliding window approach with a fixed patch size (e.g., $32 \times 32$) and stride (e.g., 16). For each image, local regions are masked to generate perturbed inputs, and the change in detection confidence is recorded to construct importance heatmaps.
+
+We evaluate explanations using:
+\begin{itemize}
+    \item \textbf{Heatmaps}: visualize the spatial importance of different regions, highlighting areas (red) that contribute most to the model's prediction.
+    \item \textbf{Insertion AUC}: measures how quickly confidence increases when important regions are added.
+    \item \textbf{Deletion AUC}: measures how quickly confidence drops when important regions are removed.
+    \item \textbf{Pointing Game Accuracy}: checks whether the most important point lies within the ground truth bounding box.
+\end{itemize}
+
+All metrics are averaged over 50 test images. Heatmaps are also visually compared to assess spatial alignment.
+
+\subsubsection{Results}
+Quantitatively, the fine-tuned model outperforms the baseline across all metrics. It achieves higher insertion AUC, lower deletion AUC, and improved pointing game accuracy, indicating more reliable and faithful explanations. Qualitatively, heatmaps from the baseline model highlight irrelevant texture regions, whereas the fine-tuned model focuses on semantically meaningful object areas.
+
+\subsubsection{Heatmap Analysis}
+Add Image
+
+\subsubsection{Explanation of Results}
+The baseline model relies heavily on non-semantic cues such as textures and background patterns, leading to hallucinated detections. This is reflected in lower insertion AUC and higher deletion AUC, indicating poor alignment between important regions and predictions.
+
+In contrast, the fine-tuned model suppresses these spurious correlations. The increase in insertion AUC shows that adding important regions quickly restores confidence, while the decrease in deletion AUC indicates that removing these regions significantly impacts predictions. Additionally, pointing game accuracy improves from \textit{XXX} to \textit{XXX}, demonstrating better localization of relevant features.
+
+Overall, these results confirm that incorporating OoD data as background enhances both robustness and interpretability of the model.
