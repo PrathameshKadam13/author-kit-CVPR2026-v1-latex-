@@ -1,118 +1,159 @@
-\section{Experiments and Results}
-\label{sec:experiments}
+\section{Methodology and Experiments}
+\label{sec:methodology_experiments}
 
-\subsection{Experimental Setup}
+\subsection{Methodology}
 
-We evaluate our proposed frequency-aware objectness calibration framework on both in-distribution (ID) and out-of-distribution (OoD) datasets. 
+We investigate the effect of training-time exposure to out-of-distribution (OoD) data on the behavior of object detectors. Our methodology consists of three main stages: (i) training a baseline object detector on in-distribution (ID) data, (ii) fine-tuning the model using OoD samples treated as background, and (iii) analyzing the resulting models using both quantitative metrics and explainability techniques. The overall goal is to understand how fine-tuning alters model behavior and contributes to reducing hallucinated detections on OoD inputs.
+
+For in-distribution training, we use the PASCAL VOC 2012 dataset, which contains annotated object categories commonly used for benchmarking object detection models. The dataset is converted into YOLO format by transforming XML annotations into normalized bounding box representations. A train–validation split is created using standard data partitioning.
+
+For OoD data, we utilize the Caltech 256 dataset, which contains a diverse set of object categories that do not overlap with the ID classes. A subset of 8,140 images is used for fine-tuning. Importantly, these OoD samples are treated as background during training, meaning no foreground object labels are assigned. This ensures that the model learns to suppress objectness scores for semantically similar but out-of-distribution inputs.
+
+We employ the YOLOv10s architecture implemented using the Ultralytics YOLO framework. The baseline model is trained on the ID dataset for 50 epochs with an input resolution of $640\times640$, batch size of 64, and default optimization settings. Training is performed using multiple GPUs to accelerate convergence.
+
+The fine-tuned model is initialized from the trained baseline and further trained for 20 epochs using a combined dataset consisting of ID data and OoD samples. During fine-tuning, the input resolution is set to $512\times512$ with a batch size of 32. The standard YOLO loss function is used without modification.
+
+The key idea of our approach is to expose the model to OoD samples during training and explicitly treat them as background. Unlike traditional OoD detection methods that operate at inference time, this strategy modifies the model's internal representation during training. By assigning OoD samples to the background class, the model is encouraged to produce low objectness scores for regions that do not correspond to valid ID objects.
+
+This process effectively reshapes the decision boundary of the detector. In standard training, the model learns to distinguish foreground objects from background based solely on ID data, leaving OoD regions underconstrained. Fine-tuning introduces additional constraints by penalizing object-like responses on OoD inputs, resulting in a more conservative objectness function. This reduces the likelihood of hallucinated detections when the model encounters unseen data.
+
+To evaluate model behavior under distribution shift, we perform inference on OoD test images using both baseline and fine-tuned models. Predictions are generated with a confidence threshold of 0.25. We measure hallucinated detections by analyzing the number and quality of predicted bounding boxes on OoD inputs.
+
+To assess spatial alignment and relevance, we compute Intersection-over-Union (IoU) between predicted regions and salient regions identified by explainability methods. IoU is evaluated at multiple thresholds (10\%, 20\%, and 30\%) to capture varying levels of localization accuracy.
+
+To understand the behavioral differences between the baseline and fine-tuned models, we employ multiple explainability techniques.
+
+\paragraph{Grad-CAM.}
+We use Gradient-weighted Class Activation Mapping (Grad-CAM) to visualize the regions of the input image that contribute most to the model's predictions. Grad-CAM is applied to the last convolutional layer of the network using a customized wrapper compatible with the YOLO architecture. This allows us to analyze whether the model focuses on semantically meaningful regions or irrelevant background features.
+
+\paragraph{Occlusion Analysis.}
+We perform occlusion-based analysis by systematically masking parts of the input image and observing the resulting change in prediction confidence. This helps identify which regions are critical for the model's decision-making process.
+
+\paragraph{Insertion and Deletion Metrics.}
+We quantify explanation quality using insertion and deletion curves. The insertion metric measures how quickly the model's confidence increases as important regions are progressively revealed, while the deletion metric measures how rapidly confidence decreases as important regions are removed. These metrics provide a quantitative assessment of how well the model's attention aligns with meaningful features.
+
+\paragraph{Pointing Game.}
+We further evaluate localization quality using the pointing game metric, which checks whether the most salient point in the Grad-CAM heatmap falls within the predicted object region.
+
+\paragraph{Frequency Bias Analysis.}
+To analyze potential biases, we examine the distribution of predicted classes and identify whether the model exhibits a tendency to favor frequently occurring categories. This helps assess whether fine-tuning reduces reliance on spurious correlations present in the training data.
+
+While the fine-tuning strategy improves robustness by reshaping the detector's decision boundary, it does not explicitly address the role of low-level signal characteristics at inference time. To further mitigate hallucinated detections, we introduce a lightweight post-hoc calibration mechanism applied directly to model predictions.
+
+\paragraph{Motivation}
+Empirical observations from our experiments indicate that:
+\begin{itemize}
+    \item High-frequency regions (e.g., textured backgrounds) frequently trigger false detections,
+    \item Small bounding boxes exhibit unstable and overconfident predictions,
+    \item These effects are amplified in OoD settings.
+\end{itemize}
+
+This behavior aligns with the known spectral bias of deep neural networks, where models tend to rely on high-frequency patterns.
+
+\paragraph{Frequency Estimation}
+Given an image or detection patch $x$, we compute its frequency energy using the Laplacian operator:
+\begin{equation}
+    f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\nabla^2 x(p)|
+\end{equation}
+where $\Omega$ denotes the spatial domain.
+
+To ensure stability, we normalize using a robust statistic:
+\begin{equation}
+    \hat{f} = \min\left(\frac{f(x)}{Q_{75}(f)},\; 2\right)
+\end{equation}
+where $Q_{75}$ is the 75th percentile of observed frequency values.
+
+\paragraph{Objectness Approximation}
+Since explicit objectness scores are not directly exposed, we approximate objectness using:
+\begin{equation}
+    o = \sqrt{s}
+\end{equation}
+where $s$ is the predicted confidence score.
+
+\paragraph{Calibration Function}
+For each detection with confidence $s$, we compute the calibrated score:
+\begin{equation}
+    s' = s \cdot \exp(-\alpha \hat{f}) \cdot \exp(-\beta o) \cdot \frac{1}{\gamma(a)}
+\end{equation}
+where:
+\begin{itemize}
+    \item $\alpha$ controls frequency suppression,
+    \item $\beta$ controls objectness suppression,
+    \item $a$ is bounding box area.
+\end{itemize}
+The size penalty is defined as:
+\begin{equation}
+    \gamma(a) =
+    \begin{cases}
+        \lambda, & a < \tau \\
+        1, & \text{otherwise}
+    \end{cases}
+\end{equation}
+
+\paragraph{Stability Constraint}
+To avoid artificial confidence boosting:
+\begin{equation}
+    s' = \min(s', s)
+\end{equation}
+This ensures calibration only suppresses overconfident predictions.
+
+\paragraph{Variants}
+We evaluate two variants:
+\begin{itemize}
+    \item \textbf{Frequency-only calibration}: $s' = s \cdot \exp(-\alpha \hat{f}) / \gamma(a)$,
+    \item \textbf{Frequency + Objectness calibration}: full formulation above.
+\end{itemize}
+
+\paragraph{Implementation Details}
+The method is applied post-hoc on detector outputs, requires no retraining or architecture modification, is computationally lightweight (Laplacian + scalar ops), and is compatible with real-time object detectors (YOLO variants).
+
+\paragraph{Key Insight}
+This formulation explicitly integrates frequency-domain cues into the detection pipeline, complementing training-time OoD exposure and providing an additional mechanism for suppressing hallucinated detections.
+
+\subsection{Experiment 1}
+
+\textit{Reserved for another experiment.}
+
+\subsection{Experiment 2}
+
+We evaluate our proposed frequency-aware objectness calibration framework on both in-distribution (ID) and out-of-distribution (OoD) datasets.
 
 For ID evaluation, we use the Pascal VOC 2012 validation split. For OoD evaluation, we construct a proximal OoD dataset using Caltech-256 by selecting visually similar but semantically mismatched categories relative to VOC classes.
 
-We perform inference using a finetuned YOLO-based detector and apply our calibration method as a post-processing step without modifying model parameters.
+We perform inference using a finetuned YOLO-based detector and apply our calibration method as a post-processing step without modifying model parameters. All experiments are conducted with a confidence threshold of $\tau = 0.25$.
 
-All experiments are conducted with a confidence threshold of $\tau = 0.25$.
+To assess OoD behavior, we use hallucination rate, false positive count, and relative reduction. Hallucination rate is the fraction of images with at least one detection above threshold $\tau=0.25$; false positive count is the total number of detections; reduction is the relative drop in FP after calibration.
 
-%---------------------------------------------------------
-
-\subsection{Evaluation Metrics}
-
-\paragraph{Hallucination Rate (HR).}
-We define hallucination rate as the fraction of images that produce at least one detection above a confidence threshold:
-
-\begin{equation}
-\text{HR} = \frac{1}{N} \sum_{i=1}^{N} \mathbb{I}\left( \exists\, d \in \mathcal{D}_i \;:\; s_d > \tau \right)
-\end{equation}
-
-where $N$ is the number of images, $\mathcal{D}_i$ denotes detections in image $i$, $s_d$ is the confidence score, and $\tau$ is the threshold.
-
-\paragraph{False Positive Count.}
-We compute the total number of detections across the dataset:
-
-\begin{equation}
-\text{FP} = \sum_{i=1}^{N} |\mathcal{D}_i|
-\end{equation}
-
-\paragraph{Reduction Percentage.}
-To quantify the effectiveness of calibration, we compute:
-
-\begin{equation}
-\text{Reduction}(\%) = 
-\frac{\text{FP}_{\text{raw}} - \text{FP}_{\text{cal}}}
-{\text{FP}_{\text{raw}}} \times 100
-\end{equation}
-
-%---------------------------------------------------------
-
-\subsection{Quantitative Results}
-
-Table~\ref{tab:main_results} summarizes the effect of our calibration framework on OoD data.
+Table~\ref{tab:main_results} summarizes the OoD results.
 
 \begin{table}[h]
 \centering
+\footnotesize
 \begin{tabular}{lccc}
 \hline
 Method & FP Count $\downarrow$ & HR $\downarrow$ & Reduction (\%) $\uparrow$ \\
 \hline
-Baseline (Finetuned YOLO) & 444 & 0.2096 & -- \\
-+ Frequency Calibration & 389 & 0.1899 & 12.38 \\
-+ Freq + Objectness Calibration & 324 & 0.1641 & 27.03 \\
+Baseline & 444 & 0.2096 & -- \\
++ Freq & 389 & 0.1899 & 12.38 \\
++ Freq + Obj & 324 & 0.1641 & 27.03 \\
 \hline
 \end{tabular}
 \caption{Quantitative comparison on OoD dataset. Lower is better for FP and HR, higher is better for reduction.}
 \label{tab:main_results}
 \end{table}
 
-We observe that frequency-only calibration reduces false positives by $12.38\%$, while incorporating objectness-aware suppression further improves the reduction to $27.03\%$.
+Frequency-only calibration reduces false positives by $12.38\%$, and frequency plus objectness calibration improves reduction to $27.03\%$.
 
-%---------------------------------------------------------
+To assess spatial alignment, we compute Intersection-over-Union (IoU) between predicted regions and salient regions from explainability methods at 10\%, 20\%, and 30\% thresholds. We also analyze confidence distributions before and after calibration, finding a positive shift $\Delta\mu = \mathbb{E}[\mathcal{S}_{\text{raw}}] - \mathbb{E}[\mathcal{S}_{\text{cal}}] > 0$, which indicates consistent suppression of overconfident OoD predictions.
 
-\subsection{Ablation Analysis}
+To understand model behavior, we employ Grad-CAM, occlusion analysis, insertion/deletion metrics, pointing game, and frequency bias analysis. Grad-CAM highlights the most salient regions, occlusion reveals prediction sensitivity, insertion/deletion quantify explanation quality, pointing game measures localization, and frequency bias analysis checks whether the model relies on commonly occurring classes.
 
-We analyze the contribution of individual components through a progressive calibration strategy. Frequency-based suppression alone reduces hallucinated detections by attenuating responses in high-texture regions. However, this effect is limited due to the persistence of overconfident predictions.
+The fine-tuning strategy improves robustness by reshaping the detector's decision boundary, while post-hoc calibration further suppresses false detections using frequency and objectness cues. This combined approach is lightweight, requires no retraining, and is compatible with real-time YOLO-style detectors.
 
-By incorporating objectness-aware modulation, the model further penalizes detections with inherently unstable confidence, leading to a substantial improvement in both false positive count and hallucination rate.
+\subsection{Experiment 3}
 
-This demonstrates that frequency and objectness cues provide complementary signals for mitigating OoD-induced hallucinations.
+\textit{Reserved for another experiment.}
 
-%---------------------------------------------------------
+\subsection{Experiment 4}
 
-\subsection{Analysis of Confidence Calibration}
-
-We analyze the distributional shift in detection confidence before and after calibration.
-
-Let $\mathcal{S}_{\text{raw}}$ and $\mathcal{S}_{\text{cal}}$ denote confidence score distributions. We evaluate:
-
-\begin{equation}
-\Delta \mu = \mathbb{E}[\mathcal{S}_{\text{raw}}] - \mathbb{E}[\mathcal{S}_{\text{cal}}]
-\end{equation}
-
-Empirically, we observe $\Delta \mu > 0$, indicating a consistent reduction in mean confidence after calibration. This reflects suppression of overconfident predictions in OoD regions.
-
-%---------------------------------------------------------
-
-\subsection{Frequency-Objectness Correlation}
-
-To further validate our hypothesis, we analyze the relationship between frequency energy and objectness scores.
-
-Given frequency values $f_i$ and objectness scores $o_i$, we examine their joint distribution:
-
-\begin{equation}
-\mathcal{C} = \{(f_i, o_i)\}_{i=1}^{M}
-\end{equation}
-
-We observe a positive correlation between $f_i$ and $o_i$, indicating that high-frequency regions tend to produce disproportionately high objectness scores. This supports the presence of frequency-induced bias in detector behavior.
-
-%---------------------------------------------------------
-
-\subsection{Discussion}
-
-Our results demonstrate that:
-
-\begin{itemize}
-    \item Frequency-aware calibration reduces spurious detections caused by textured regions.
-    \item Objectness-aware suppression further stabilizes predictions by penalizing overconfident outputs.
-    \item The combined approach achieves up to $27.03\%$ reduction in false positives and improves hallucination rates.
-\end{itemize}
-
-Importantly, these improvements are achieved without retraining or modifying the detector, making the method suitable for real-time and resource-constrained applications.
-
-\end{document}
+\textit{Reserved for another experiment.}
