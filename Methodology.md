@@ -56,68 +56,39 @@ To understand the behavioral differences between the baseline and fine-tuned mod
 
 
 ---
+---
 
 ### 3.7 Post-hoc Frequency-Aware Objectness Calibration
 
-While the fine-tuning strategy improves robustness by reshaping the detector’s decision boundary, it does not explicitly address the role of low-level signal characteristics at inference time. To further mitigate hallucinated detections, we introduce a lightweight post-hoc calibration mechanism applied directly to model predictions.
+While fine-tuning improves robustness at the representation level, it does not explicitly address low-level signal biases at inference time. We therefore introduce a lightweight post-hoc calibration applied directly to detection scores.
 
-#### Motivation
+#### Formulation
 
-Empirical observations from our experiments indicate that:
-- High-frequency regions (e.g., textured backgrounds) frequently trigger false detections  
-- Small bounding boxes exhibit unstable and overconfident predictions  
-- These effects are amplified in OoD settings  
-
-This behavior aligns with the known spectral bias of deep neural networks, where models tend to rely on high-frequency patterns.
-
----
-
-#### Frequency Estimation
-
-Given an image or detection patch $x$, we compute its frequency energy using the Laplacian operator:
+Given an input region $x$, we estimate its frequency energy using the Laplacian:
 
 $$
 f(x) = \frac{1}{|\Omega|} \sum_{p \in \Omega} |\nabla^2 x(p)|
 $$
 
-where $\Omega$ denotes the spatial domain.
-
-To ensure stability, we normalize using a robust statistic:
+We normalize frequency using a robust statistic:
 
 $$
 \hat{f} = \min\left(\frac{f(x)}{Q_{75}(f)},\; 2\right)
 $$
 
-where $Q_{75}$ is the 75th percentile of observed frequency values.
-
----
-
-#### Objectness Approximation
-
-Since explicit objectness scores are not directly exposed, we approximate objectness using:
+Objectness is approximated as:
 
 $$
 o = \sqrt{s}
 $$
 
-where $s$ is the predicted confidence score.
-
----
-
-#### Calibration Function
-
-For each detection with confidence $s$, we compute the calibrated score:
+For each detection with confidence $s$, the calibrated score is:
 
 $$
 s' = s \cdot \exp(-\alpha \hat{f}) \cdot \exp(-\beta o) \cdot \frac{1}{\gamma(a)}
 $$
 
-where:
-- $\alpha$ controls frequency suppression  
-- $\beta$ controls objectness suppression  
-- $a$ is bounding box area  
-
-The size penalty is defined as:
+where $a$ denotes bounding box area and
 
 $$
 \gamma(a) =
@@ -127,45 +98,17 @@ $$
 \end{cases}
 $$
 
----
-
-#### Stability Constraint
-
-To avoid artificial confidence boosting:
+To ensure stability, we enforce:
 
 $$
 s' = \min(s', s)
 $$
 
-This ensures calibration only suppresses overconfident predictions.
-
----
-
 #### Variants
 
-We evaluate two variants:
+- **Frequency-only:** $s' = s \cdot \exp(-\alpha \hat{f}) / \gamma(a)$  
+- **Frequency + Objectness:** full formulation above  
 
-- **Frequency-only calibration**
-  
-  $$
-  s' = s \cdot \exp(-\alpha \hat{f}) / \gamma(a)
-  $$
+#### Interpretation
 
-- **Frequency + Objectness calibration**
-  
-  Full formulation as defined above
-
----
-
-#### Implementation Details
-
-- Applied post-hoc on detector outputs  
-- No retraining or architecture modification required  
-- Computationally lightweight (Laplacian + scalar ops)  
-- Compatible with real-time object detectors (YOLO variants)  
-
----
-
-#### Key Insight
-
-This formulation explicitly integrates frequency-domain cues into the detection pipeline, complementing training-time OoD exposure and providing an additional mechanism for suppressing hallucinated detections.
+The frequency term suppresses high-texture regions, the objectness term penalizes overconfident predictions, and the size penalty regularizes small detections. Together, these components reduce hallucinations by targeting known failure modes under OoD settings.
